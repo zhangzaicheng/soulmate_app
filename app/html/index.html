@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>欧若拉 - AI情感陪伴</title>
+    <link rel="stylesheet" href="/static/js/element-plus-index.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-bg: #eef2ff;
+            --text: #1e293b;
+            --text-sub: #94a3b8;
+            --bg: #f4f5fb;
+            --card: #ffffff;
+            --border: #eceef3;
+            --danger: #f87171;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body, #app { height: 100%; }
+        body {
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .layout { height: 100%; display: flex; flex-direction: column; }
+
+        /* ===== 顶栏 ===== */
+        .topbar {
+            height: 60px; display: flex; align-items: center; padding: 0 22px;
+            background: rgba(255,255,255,.85); backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border); z-index: 10; gap: 26px;
+        }
+        .logo {
+            font-size: 19px; font-weight: bold; display: flex; align-items: center; gap: 9px;
+            background: linear-gradient(120deg, var(--primary), #a855f7);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .logo .el-icon { color: var(--primary); -webkit-text-fill-color: var(--primary); }
+        .topbar .el-menu { flex: 1; border-bottom: none !important; background: transparent; }
+        .topbar .el-menu-item { height: 60px; font-size: 14.5px; border-radius: 0 0 10px 10px; margin: 0 4px; }
+        .user-chip { cursor: pointer; display: flex; align-items: center; gap: 9px; padding: 5px 12px 5px 6px;
+                     border-radius: 99px; transition: background .2s; }
+        .user-chip:hover { background: var(--primary-bg); }
+
+        /* ===== 主区域 ===== */
+        .main { flex: 1; display: flex; overflow: hidden; }
+
+        /* ===== 会话栏 ===== */
+        .sidebar {
+            width: 264px; background: var(--card); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column; transition: all .28s ease; overflow: hidden;
+        }
+        .sidebar.collapsed { width: 0; border-right: none; }
+        .sidebar-header { padding: 16px 14px 10px; min-width: 264px; }
+        .session-list { flex: 1; overflow-y: auto; padding: 4px 8px 12px; min-width: 264px; }
+        .session-item {
+            position: relative; padding: 11px 12px; margin-bottom: 4px; cursor: pointer;
+            border-radius: 10px; transition: background .15s;
+        }
+        .session-item:hover { background: #f6f7fd; }
+        .session-item.active { background: var(--primary-bg); }
+        .session-item.active::before {
+            content: ''; position: absolute; left: 0; top: 22%; bottom: 22%; width: 3px;
+            border-radius: 3px; background: var(--primary);
+        }
+        .session-title { font-size: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 178px; padding-right: 26px; }
+        .session-item.active .session-title { color: var(--primary); font-weight: 600; }
+        .session-time { font-size: 12px; color: var(--text-sub); margin-top: 4px; transition: opacity .2s; }
+        /* 悬浮才显示删除按钮 */
+        .session-del {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            opacity: 0; transition: opacity .18s; padding: 6px !important;
+        }
+        .session-item:hover .session-del { opacity: 1; }
+        .session-item:hover .session-time { opacity: 0; }
+
+        /* ===== 聊天区 ===== */
+        .chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        .chat-area { flex: 1; overflow-y: auto; padding: 26px 8%; scroll-behavior: smooth; }
+        .msg-row { display: flex; margin-bottom: 18px; animation: fadeUp .25s ease; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .msg-row.user { justify-content: flex-end; }
+        .avatar {
+            width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; font-size: 19px; color: #fff;
+        }
+        .avatar.ai { background: linear-gradient(135deg, var(--primary), #a855f7); margin-right: 12px; box-shadow: 0 3px 8px rgba(99,102,241,.3); padding: 0; overflow: hidden; }
+        .avatar.ai img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+        .avatar.user { background: linear-gradient(135deg, #34d399, #10b981); margin-left: 12px; }
+        .bubble {
+            max-width: 62%; padding: 12px 16px; border-radius: 14px; font-size: 14.5px; line-height: 1.75;
+        }
+        .bubble.ai {
+            background: var(--card); color: var(--text); white-space: pre-wrap;
+            border: 1px solid var(--border); border-top-left-radius: 4px;
+            box-shadow: 0 2px 6px rgba(30,41,59,.04);
+        }
+        .bubble.user {
+            background: linear-gradient(120deg, var(--primary), var(--primary-light)); color: #fff;
+            white-space: pre-wrap; border-top-right-radius: 4px;
+            box-shadow: 0 3px 10px rgba(99,102,241,.25);
+        }
+        .typing-dots { display: inline-flex; gap: 5px; padding: 6px 2px; }
+        .typing-dots span {
+            width: 7px; height: 7px; border-radius: 50%; background: var(--primary-light);
+            animation: blink 1.2s infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: .2s; }
+        .typing-dots span:nth-child(3) { animation-delay: .4s; }
+        @keyframes blink { 0%,70%,100% { opacity: .25; transform: scale(.9);} 35% { opacity: 1; transform: scale(1.1);} }
+
+        /* 欢迎页 */
+        .welcome { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+        .welcome-logo {
+            width: 74px; height: 74px; border-radius: 24px; overflow: hidden;
+            box-shadow: 0 10px 30px rgba(99,102,241,.35); margin-bottom: 4px;
+        }
+        .welcome-logo img { width: 100%; height: 100%; object-fit: cover; }
+        .welcome h2 { font-size: 21px; font-weight: 600; }
+        .welcome p { color: var(--text-sub); font-size: 14px; }
+        .sug-list { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; justify-content: center; }
+        .sug-item {
+            padding: 9px 18px; background: var(--card); border: 1px solid var(--border);
+            border-radius: 99px; font-size: 13.5px; color: #475569; cursor: pointer; transition: all .2s;
+        }
+        .sug-item:hover { border-color: var(--primary-light); color: var(--primary); background: var(--primary-bg); transform: translateY(-2px); }
+
+        /* 状态与情绪 */
+        .status-bar { text-align: center; font-size: 12.5px; color: var(--text-sub); padding: 6px; }
+        .status-bar .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background: var(--primary-light); margin-right:6px; animation: blink 1.2s infinite; }
+        .emotion-chip { display: flex; justify-content: center; gap: 8px; margin: 4px 0 10px; }
+
+        /* 输入栏 */
+        .input-bar { padding: 16px 8% 20px; }
+        .input-inner {
+            display: flex; gap: 12px; align-items: flex-end; background: var(--card);
+            border: 1px solid var(--border); border-radius: 16px; padding: 10px 12px;
+            box-shadow: 0 4px 16px rgba(30,41,59,.05); transition: border-color .2s;
+        }
+        .input-inner:focus-within { border-color: var(--primary-light); }
+        .input-inner .el-textarea__inner { box-shadow: none !important; background: transparent; }
+
+        /* ===== 内容面板 ===== */
+        .panel { flex: 1; overflow-y: auto; padding: 24px 4%; }
+        .panel .el-card { border-radius: 14px; border: 1px solid var(--border); box-shadow: 0 2px 10px rgba(30,41,59,.04) !important; }
+        .panel .el-card__header { font-weight: 600; }
+        /* 表格删除按钮悬浮显示 */
+        .hover-del { opacity: 0; transition: opacity .18s; }
+        .el-table__row:hover .hover-del { opacity: 1; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #d5d9e6; border-radius: 3px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+    </style>
+</head>
+<body>
+<div id="app" v-loading="pageLoading">
+    <div class="layout" v-if="user">
+        <!-- 顶部栏 -->
+        <div class="topbar">
+            <el-tooltip v-if="activeTab==='chat'" :content="sidebarCollapsed ? '展开会话栏' : '收起会话栏'" placement="bottom">
+                <el-button text class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+                    <el-icon :size="18">
+                        <Expand v-if="sidebarCollapsed"></Expand>
+                        <Fold v-else></Fold>
+                    </el-icon>
+                </el-button>
+            </el-tooltip>
+            <div class="logo" style="gap:10px">
+                <img src="/static/avatar.png" style="width:34px;height:34px;border-radius:10px;object-fit:cover;box-shadow:0 2px 8px rgba(99,102,241,.3)">
+                <span>欧若拉</span>
+            </div>
+            <el-menu mode="horizontal" :default-active="activeTab" :ellipsis="false" @select="switchTab">
+                <el-menu-item index="chat"><el-icon><ChatLineRound></ChatLineRound></el-icon>聊天</el-menu-item>
+                <el-menu-item index="memory"><el-icon><Coin></Coin></el-icon>记忆</el-menu-item>
+                <el-menu-item index="emotion"><el-icon><TrendCharts></TrendCharts></el-icon>情感</el-menu-item>
+                <el-menu-item index="profile"><el-icon><User></User></el-icon>档案</el-menu-item>
+            </el-menu>
+            <el-badge :value="unreadCount" :hidden="!unreadCount" :max="9">
+                <el-button circle text @click="openCare" style="padding:9px">
+                    <el-icon :size="18"><Bell></Bell></el-icon>
+                </el-button>
+            </el-badge>
+            <el-dropdown @command="onUserCommand">
+                <div class="user-chip">
+                    <el-avatar :size="34" style="background:linear-gradient(135deg,#34d399,#10b981);font-weight:600">{{ user.nickname?.[0] || '我' }}</el-avatar>
+                    <span>{{ user.nickname }}</span>
+                    <el-icon :size="13" style="color:var(--text-sub)"><ArrowDown></ArrowDown></el-icon>
+                </div>
+                <template #dropdown>
+                    <el-dropdown-menu>
+                        <el-dropdown-item command="logout"><el-icon><SwitchButton></SwitchButton></el-icon>退出登录</el-dropdown-item>
+                    </el-dropdown-menu>
+                </template>
+            </el-dropdown>
+        </div>
+
+        <div class="main">
+            <!-- 聊天页 -->
+            <div v-show="activeTab==='chat'" style="display:flex;flex:1;overflow:hidden">
+                <div class="sidebar" :class="{collapsed: sidebarCollapsed}">
+                    <div class="sidebar-header">
+                        <el-button type="primary" style="width:100%;border-radius:10px" @click="newSession">
+                            <el-icon style="margin-right:6px"><Plus></Plus></el-icon>新的对话
+                        </el-button>
+                    </div>
+                    <div class="session-list">
+                        <div v-for="s in sessions" :key="s.session_id" class="session-item"
+                             :class="{active: s.session_id===currentSessionId}" @click="switchSession(s)">
+                            <div class="session-title">{{ s.title }}</div>
+                            <div class="session-time">{{ fmtTime(s.updated_at) }}</div>
+                            <el-button class="session-del" link type="danger" @click.stop="delSession(s)">
+                                <el-icon><Delete></Delete></el-icon>
+                            </el-button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-wrap">
+                    <div class="chat-area" ref="chatBox">
+                        <!-- 欢迎页（无消息时） -->
+                        <div class="welcome" v-if="!messages.length && !statusText">
+                            <div class="welcome-logo"><img src="/static/avatar.png"></div>
+                            <h2>你好，我是欧若拉</h2>
+                            <p>你的专属情感陪伴伙伴，想聊点什么？</p>
+                            <div class="sug-list">
+                                <div class="sug-item" v-for="s in suggestions" :key="s" @click="quickSend(s)">{{ s }}</div>
+                            </div>
+                        </div>
+                        <template v-else>
+                            <div class="emotion-chip" v-if="lastEmotion">
+                                <el-tag type="info" effect="plain" round>心情：{{ lastEmotion.emotion }} · 强度 {{ lastEmotion.intensity }}/10</el-tag>
+                                <el-tag v-if="lastEmotion.is_crisis" type="danger" round>危机信号</el-tag>
+                            </div>
+                            <div class="status-bar" v-if="statusText"><span class="dot"></span>{{ statusText }}</div>
+                            <div v-for="(m, i) in messages" :key="i" class="msg-row" :class="m.role">
+                                <template v-if="m.role==='assistant'">
+                                    <div class="avatar ai"><img src="/static/avatar.png"></div>
+                                    <div class="bubble ai">
+                                        <span v-if="!m.content && m.typing" class="typing-dots"><span></span><span></span><span></span></span>
+                                        <template v-else>{{ m.content }}<span v-if="m.typing" style="opacity:.4">▌</span></template>
+                                    </div>
+                                </template>
+                                <template v-else>
+                                    <div class="bubble user">{{ m.content }}</div>
+                                    <div class="avatar user">{{ user.nickname?.[0] || '我' }}</div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="input-bar">
+                        <div class="input-inner">
+                            <el-input v-model="input" placeholder="和欧若拉说点什么吧...（Enter发送）" size="large"
+                                      :autosize="{minRows:1, maxRows:4}" type="textarea" resize="none"
+                                      @keydown.enter.exact.prevent="send" :disabled="sending" style="flex:1"></el-input>
+                            <el-button type="primary" :loading="sending" @click="send" style="border-radius:11px;padding:19px 22px">
+                                <el-icon :size="18"><Promotion></Promotion></el-icon>
+                            </el-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 记忆页 -->
+            <div v-show="activeTab==='memory'" class="panel">
+                <el-card shadow="never" style="margin-bottom:16px">
+                    <template #header>
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span>🧠 长期记忆 · {{ memories.length }} 条</span>
+                            <el-button size="small" text @click="loadMemories">
+                                <el-icon><Refresh></Refresh></el-icon>&nbsp;刷新
+                            </el-button>
+                        </div>
+                    </template>
+                    <el-table :data="memories" style="width:100%">
+                        <el-table-column prop="content" label="记忆内容" min-width="300"></el-table-column>
+                        <el-table-column prop="category" label="类别" width="120">
+                            <template #default="{row}">
+                                <el-tag :type="categoryType(row.category)" size="small" round effect="plain">{{ categoryName(row.category) }}</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column prop="importance" label="重要性" width="150">
+                            <template #default="{row}">
+                                <el-progress :percentage="Math.round(row.importance*100)" :stroke-width="8" :color="progressColor"></el-progress>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="记录时间" width="150">
+                            <template #default="{row}">{{ fmtTime(row.created_at) }}</template>
+                        </el-table-column>
+                        <el-table-column label="" width="70" align="center">
+                            <template #default="{row}">
+                                <el-button class="hover-del" link type="danger" @click="delMemory(row)"><el-icon><Delete></Delete></el-icon></el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-card>
+                <el-card shadow="never">
+                    <template #header><span>💭 工作记忆 · 跨对话的整体了解，自动维护</span></template>
+                    <template v-if="workingMemory">
+                        <p style="margin-bottom:12px;line-height:1.8"><b style="color:var(--primary)">整体了解</b>&nbsp;&nbsp;{{ workingMemory.summary || '（暂无）' }}</p>
+                        <p style="line-height:2"><b style="color:var(--primary)">近期话题</b>&nbsp;&nbsp;
+                            <el-tag v-for="t in workingMemory.open_topics" :key="t" size="small" round effect="plain" style="margin-right:6px">{{ t }}</el-tag>
+                            <span v-if="!workingMemory.open_topics?.length" style="color:var(--text-sub)">（暂无）</span>
+                        </p>
+                    </template>
+                    <el-empty v-else description="还没有工作记忆，和欧若拉多聊聊吧" :image-size="60"></el-empty>
+                </el-card>
+            </div>
+
+            <!-- 情感页 -->
+            <div v-show="activeTab==='emotion'" class="panel">
+                <el-card shadow="never" style="margin-bottom:16px">
+                    <template #header><span>📈 情绪强度变化</span></template>
+                    <div ref="lineChart" style="width:100%;height:320px"></div>
+                </el-card>
+                <el-card shadow="never">
+                    <template #header><span>🥧 情绪分布</span></template>
+                    <div ref="pieChart" style="width:100%;height:320px"></div>
+                </el-card>
+            </div>
+
+            <!-- 档案页 -->
+            <div v-show="activeTab==='profile'" class="panel">
+                <el-card shadow="never" style="max-width:680px">
+                    <template #header><span>📇 用户档案 · AI自动提取，也可手动修正</span></template>
+                    <el-form label-width="90px" label-position="left">
+                        <el-form-item label="姓名"><el-input v-model="profileForm.name" placeholder="还不知道你的名字"></el-input></el-form-item>
+                        <el-form-item label="职业/学业"><el-input v-model="profileForm.occupation"></el-input></el-form-item>
+                        <el-form-item label="喜好">
+                            <el-select v-model="profileForm.preferences" multiple filterable allow-create default-first-option
+                                       placeholder="输入后回车添加" style="width:100%"></el-select>
+                        </el-form-item>
+                        <el-form-item label="重要的人/事">
+                            <el-select v-model="profileForm.relationships" multiple filterable allow-create default-first-option
+                                       placeholder="如：养了一只叫团子的橘猫" style="width:100%"></el-select>
+                        </el-form-item>
+                        <el-form-item><el-button type="primary" round @click="saveProfile">保存档案</el-button></el-form-item>
+                    </el-form>
+                </el-card>
+                <el-card shadow="never" style="max-width:680px;margin-top:16px">
+                    <template #header><span>⏰ 纪念日与提醒 · 到时欧若拉会主动问候</span></template>
+                    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+                        <el-input v-model="memorialForm.title" placeholder="纪念日名称，如：团子的生日" style="flex:1;min-width:170px"></el-input>
+                        <el-date-picker v-model="memorialForm.date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:150px"></el-date-picker>
+                        <el-button type="primary" round @click="addMemorial">添加</el-button>
+                    </div>
+                    <el-checkbox v-model="memorialForm.repeat_yearly" label="每年重复" style="margin-bottom:12px"></el-checkbox>
+                    <el-table :data="memorials" size="small" empty-text="还没有纪念日，添加一个吧">
+                        <el-table-column prop="title" label="名称" min-width="150"></el-table-column>
+                        <el-table-column prop="date_str" label="日期" width="110"></el-table-column>
+                        <el-table-column label="每年重复" width="90">
+                            <template #default="{row}">{{ row.repeat_yearly ? '是' : '否' }}</template>
+                        </el-table-column>
+                        <el-table-column label="" width="70" align="center">
+                            <template #default="{row}">
+                                <el-button class="hover-del" link type="danger" @click="delMemorial(row)"><el-icon><Delete></Delete></el-icon></el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+                </el-card>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主动消息抽屉 -->
+    <el-drawer v-model="careDrawer" title="欧若拉的悄悄话" size="380px">
+        <div style="margin-bottom:14px;display:flex;gap:8px">
+            <el-button size="small" type="primary" round plain @click="triggerCare">让欧若拉主动说句话</el-button>
+            <el-button size="small" round @click="readAllCare" :disabled="!careList.length">全部已读</el-button>
+        </div>
+        <el-empty v-if="!careList.length" description="暂时没有新消息" :image-size="80"></el-empty>
+        <el-card v-for="m in careList" :key="m.id" shadow="never" style="margin-bottom:10px;border-radius:12px">
+            <el-tag size="small" :type="m.kind === 'memorial' ? 'warning' : 'success'" round effect="plain" style="margin-bottom:8px">
+                {{ m.kind === 'memorial' ? '⏰ 纪念日提醒' : '💝 主动关心' }}
+            </el-tag>
+            <div style="font-size:14px;line-height:1.8;white-space:pre-wrap">{{ m.content }}</div>
+            <div style="font-size:12px;color:var(--text-sub);margin-top:8px">{{ fmtTime(m.created_at) }}</div>
+        </el-card>
+    </el-drawer>
+
+    <!-- 登录/注册对话框 -->
+    <el-dialog v-model="authVisible" width="400px" :close-on-click-modal="false" :show-close="!!user" center>
+        <template #header>
+            <div style="text-align:center">
+                <div class="welcome-logo" style="width:58px;height:58px;margin:0 auto 10px;border-radius:18px"><img src="/static/avatar.png"></div>
+                <div style="font-size:18px;font-weight:600">欢迎来到欧若拉</div>
+            </div>
+        </template>
+        <el-tabs v-model="authTab" stretch>
+            <el-tab-pane label="登录" name="login">
+                <el-form @submit.prevent style="padding-top:8px">
+                    <el-form-item><el-input v-model="authForm.username" placeholder="用户名" size="large"></el-input></el-form-item>
+                    <el-form-item><el-input v-model="authForm.password" type="password" placeholder="密码" size="large" show-password @keydown.enter="doLogin"></el-input></el-form-item>
+                    <el-button type="primary" style="width:100%" size="large" round :loading="authLoading" @click="doLogin">登 录</el-button>
+                </el-form>
+            </el-tab-pane>
+            <el-tab-pane label="注册" name="register">
+                <el-form @submit.prevent style="padding-top:8px">
+                    <el-form-item><el-input v-model="authForm.username" placeholder="用户名（至少2位）" size="large"></el-input></el-form-item>
+                    <el-form-item><el-input v-model="authForm.nickname" placeholder="昵称（可选）" size="large"></el-input></el-form-item>
+                    <el-form-item><el-input v-model="authForm.email" placeholder="邮箱（可选，用于找回密码）" size="large"></el-input></el-form-item>
+                    <el-form-item><el-input v-model="authForm.password" type="password" placeholder="密码（至少6位）" size="large" show-password @keydown.enter="doRegister"></el-input></el-form-item>
+                    <el-button type="primary" style="width:100%" size="large" round :loading="authLoading" @click="doRegister">注 册</el-button>
+                </el-form>
+            </el-tab-pane>
+        </el-tabs>
+    </el-dialog>
+</div>
+
+<script src="/static/js/vue.global.prod.js"></script>
+<script src="/static/js/element-plus.full.min.js"></script>
+<script src="/static/js/icons.js"></script>
+<script src="/static/js/echarts.min.js"></script>
+<script>
+const { createApp, ref, reactive, nextTick } = Vue;
+
+const app = createApp({
+    setup() {
+        // ---------- 基础状态 ----------
+        const pageLoading = ref(false);
+        const user = ref(null);
+        const token = ref(localStorage.getItem('sm_token') || '');
+        const activeTab = ref('chat');
+        const sidebarCollapsed = ref(false);
+        const authVisible = ref(false);
+        const authTab = ref('login');
+        const authLoading = ref(false);
+        const authForm = reactive({ username: '', password: '', nickname: '', email: '' });
+        const suggestions = ['今天有点累，想找人聊聊', '我最近学会了做一道新菜！', '帮我记住一件事'];
+
+        // ---------- 会话与聊天 ----------
+        const sessions = ref([]);
+        const currentSessionId = ref('');
+        const messages = ref([]);
+        const input = ref('');
+        const sending = ref(false);
+        const statusText = ref('');
+        const lastEmotion = ref(null);
+        const chatBox = ref(null);
+
+        // ---------- 记忆/档案/情感 ----------
+        const memories = ref([]);
+        const workingMemory = ref(null);
+        const profileForm = reactive({ name: '', occupation: '', preferences: [], relationships: [] });
+        const emotionData = ref([]);
+        const lineChart = ref(null);
+        const pieChart = ref(null);
+        let lineInst = null, pieInst = null;
+        const progressColor = [
+            { color: '#f87171', percentage: 40 },
+            { color: '#fbbf24', percentage: 70 },
+            { color: '#6366f1', percentage: 100 }
+        ];
+
+        // ---------- 主动关心/纪念日 ----------
+        const careDrawer = ref(false);
+        const careList = ref([]);
+        const unreadCount = ref(0);
+        const memorials = ref([]);
+        const memorialForm = reactive({ title: '', date: '', repeat_yearly: true });
+
+        // ---------- 工具 ----------
+        const notify = (msg, type = 'error') => ElementPlus.ElNotification({ message: msg, type });
+        const fmtTime = (t) => t ? t.replace('T', ' ').slice(5, 16) : '';
+        const scrollToBottom = () => nextTick(() => { if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight; });
+
+        async function api(path, options = {}) {
+            const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+            if (token.value) headers['Authorization'] = 'Bearer ' + token.value;
+            const resp = await fetch(path, { ...options, headers });
+            if (resp.status === 401) {
+                user.value = null; token.value = ''; localStorage.removeItem('sm_token');
+                authVisible.value = true;
+                throw new Error('未登录');
+            }
+            return resp.json();
+        }
+
+        const categoryName = (c) => ({ fact: '事实', preference: '喜好', relationship: '关系', event: '事件', goal: '目标', emotion: '情感' }[c] || c);
+        const categoryType = (c) => ({ fact: 'primary', preference: 'success', relationship: 'warning', event: 'info', goal: 'danger', emotion: '' }[c] || 'info');
+
+        // ---------- 认证 ----------
+        async function doLogin() {
+            if (!authForm.username || !authForm.password) return notify('请输入用户名和密码', 'warning');
+            authLoading.value = true;
+            try {
+                const rs = await fetch('/api/user/login', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: authForm.username, password: authForm.password })
+                }).then(r => r.json());
+                if (rs.code !== 200) return notify(rs.msg);
+                afterAuth(rs.data);
+            } finally { authLoading.value = false; }
+        }
+
+        async function doRegister() {
+            if (!authForm.username || !authForm.password) return notify('请输入用户名和密码', 'warning');
+            authLoading.value = true;
+            try {
+                const rs = await fetch('/api/user/register', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...authForm })
+                }).then(r => r.json());
+                if (rs.code !== 200) return notify(rs.msg);
+                afterAuth(rs.data);
+            } finally { authLoading.value = false; }
+        }
+
+        async function afterAuth(data) {
+            token.value = data.token;
+            localStorage.setItem('sm_token', data.token);
+            const me = await api('/api/user/me');
+            user.value = me.data;
+            authVisible.value = false;
+            authForm.username = ''; authForm.password = '';
+            await loadSessions();
+            switchTab('chat');
+            ElementPlus.ElMessage.success('欢迎回来，' + data.nickname);
+        }
+
+        async function logout() {
+            try { await api('/api/user/logout', { method: 'POST' }); } catch (e) {}
+            user.value = null; token.value = ''; localStorage.removeItem('sm_token');
+            messages.value = []; sessions.value = [];
+            authVisible.value = true;
+        }
+
+        function onUserCommand(cmd) { if (cmd === 'logout') logout(); }
+
+        // ---------- 会话 ----------
+        async function loadSessions() {
+            const rs = await api('/api/session/list');
+            sessions.value = rs.data || [];
+            if (sessions.value.length && !currentSessionId.value) switchSession(sessions.value[0]);
+        }
+
+        async function newSession() {
+            const rs = await api('/api/chat/create_session', { method: 'POST' });
+            sessions.value.unshift({ session_id: rs.data, title: '新的对话', updated_at: new Date().toISOString() });
+            currentSessionId.value = rs.data;
+            messages.value = []; lastEmotion.value = null; statusText.value = '';
+        }
+
+        async function switchSession(s) {
+            currentSessionId.value = s.session_id;
+            const rs = await api(`/api/session/${s.session_id}/messages`);
+            messages.value = (rs.data || []).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content }));
+            lastEmotion.value = null; statusText.value = '';
+            scrollToBottom();
+        }
+
+        async function delSession(s) {
+            try {
+                await ElementPlus.ElMessageBox.confirm('删除这个对话？', '提示', { type: 'warning' });
+            } catch (e) { return; }
+            await api(`/api/session/${s.session_id}`, { method: 'DELETE' });
+            sessions.value = sessions.value.filter(x => x.session_id !== s.session_id);
+            if (currentSessionId.value === s.session_id) {
+                currentSessionId.value = ''; messages.value = [];
+                if (sessions.value.length) switchSession(sessions.value[0]);
+            }
+        }
+
+        // ---------- 聊天（SSE流式） ----------
+        async function doSend(q) {
+            if (!q || sending.value) return;
+            if (!currentSessionId.value) await newSession();
+            input.value = '';
+            sending.value = true; statusText.value = ''; lastEmotion.value = null;
+            messages.value.push({ role: 'user', content: q });
+            const aiMsg = reactive({ role: 'assistant', content: '', typing: true });
+            messages.value.push(aiMsg);
+            scrollToBottom();
+
+            try {
+                const resp = await fetch(`/api/chat?question=${encodeURIComponent(q)}&session_id=${currentSessionId.value}`,
+                    { headers: { 'Authorization': 'Bearer ' + token.value } });
+                if (resp.status === 401) { user.value = null; authVisible.value = true; return; }
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop();
+                    for (const line of lines) {
+                        if (!line.startsWith('data: ')) continue;
+                        const data = JSON.parse(line.slice(6));
+                        if (data.type === 'status') {
+                            statusText.value = { emotion: '欧若拉正在感受你的情绪...', retrieval: '欧若拉正在回忆...', dialogue: '欧若拉正在回复...' }[data.data] || data.data;
+                        } else if (data.type === 'emotion') {
+                            lastEmotion.value = data.data;
+                            statusText.value = '';
+                        } else if (data.type === 'token') {
+                            aiMsg.content += data.data;
+                            scrollToBottom();
+                        } else if (data.type === 'error') {
+                            aiMsg.content += '\n（出错了：' + data.data + '）';
+                        }
+                    }
+                }
+            } catch (e) {
+                aiMsg.content += '\n（连接中断，请重试）';
+            } finally {
+                aiMsg.typing = false;
+                sending.value = false; statusText.value = '';
+                scrollToBottom();
+                loadSessions();
+            }
+        }
+
+        function send() { doSend(input.value.trim()); }
+        function quickSend(s) { if (!sending.value) doSend(s); }
+
+        // ---------- 记忆页 ----------
+        async function loadMemories() {
+            const rs = await api('/api/memory/list');
+            memories.value = rs.data || [];
+            const p = await api('/api/memory/profile');
+            workingMemory.value = p.data.working;
+        }
+
+        async function delMemory(row) {
+            try {
+                await ElementPlus.ElMessageBox.confirm(`确定删除记忆「${row.content}」？`, '提示', { type: 'warning' });
+            } catch (e) { return; }
+            await api(`/api/memory/${row.memory_id}`, { method: 'DELETE' });
+            memories.value = memories.value.filter(m => m.memory_id !== row.memory_id);
+            ElementPlus.ElMessage.success('已删除');
+        }
+
+        // ---------- 档案页 ----------
+        async function loadProfile() {
+            const p = await api('/api/memory/profile');
+            const profile = p.data.profile;
+            profileForm.name = profile?.name || '';
+            profileForm.occupation = profile?.occupation || '';
+            profileForm.preferences = profile?.preferences || [];
+            profileForm.relationships = profile?.relationships || [];
+            workingMemory.value = p.data.working;
+        }
+
+        async function saveProfile() {
+            await api('/api/memory/profile', { method: 'PUT', body: JSON.stringify({ ...profileForm }) });
+            ElementPlus.ElMessage.success('档案已保存');
+        }
+
+        // ---------- 情感页（ECharts） ----------
+        async function loadEmotion() {
+            const rs = await api('/api/memory/emotion_curve');
+            emotionData.value = rs.data || [];
+            await nextTick();
+            drawCharts();
+        }
+
+        function drawCharts() {
+            const data = emotionData.value;
+            if (lineInst) lineInst.dispose();
+            lineInst = echarts.init(lineChart.value);
+            lineInst.setOption({
+                tooltip: { trigger: 'axis' },
+                grid: { left: 40, right: 20, top: 30, bottom: 60 },
+                xAxis: { type: 'category', data: data.map(d => fmtTime(d.created_at)), axisLabel: { rotate: 45, fontSize: 10 }, boundaryGap: false },
+                yAxis: { type: 'value', min: 0, max: 10, name: '强度', splitLine: { lineStyle: { type: 'dashed', color: '#eceef3' } } },
+                series: [{ type: 'line', data: data.map(d => d.intensity), smooth: true, symbol: 'circle', symbolSize: 7,
+                           lineStyle: { color: '#6366f1', width: 3 }, itemStyle: { color: '#6366f1' },
+                           areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                               { offset: 0, color: 'rgba(99,102,241,.25)' }, { offset: 1, color: 'rgba(99,102,241,0)' }]) } }]
+            });
+            const counts = {};
+            data.forEach(d => counts[d.emotion] = (counts[d.emotion] || 0) + 1);
+            const pieData = Object.entries(counts).map(([name, value]) => ({ name, value }));
+            if (pieInst) pieInst.dispose();
+            pieInst = echarts.init(pieChart.value);
+            pieInst.setOption({
+                tooltip: { trigger: 'item', formatter: '{b}: {c}次 ({d}%)' },
+                legend: { orient: 'vertical', left: 'left', top: 'middle' },
+                color: ['#6366f1', '#a855f7', '#34d399', '#fbbf24', '#f87171', '#38bdf8', '#fb923c', '#c084fc'],
+                series: [{ type: 'pie', radius: ['42%', '66%'], center: ['55%', '50%'], data: pieData,
+                           itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+                           label: { formatter: '{b} {d}%' },
+                           emphasis: { itemStyle: { shadowBlur: 12, shadowOffsetX: 0 } } }]
+            });
+        }
+
+        // ---------- 主动关心/纪念日 ----------
+        async function loadCare() {
+            try {
+                const rs = await api('/api/care/unread');
+                careList.value = rs.data || [];
+                unreadCount.value = careList.value.length;
+            } catch (e) { /* 未登录等忽略 */ }
+        }
+
+        function openCare() {
+            careDrawer.value = true;
+            loadCare();
+        }
+
+        async function readAllCare() {
+            await api('/api/care/read_all', { method: 'POST' });
+            careList.value = []; unreadCount.value = 0;
+            ElementPlus.ElMessage.success('已全部标记为已读');
+        }
+
+        async function triggerCare() {
+            const rs = await api('/api/care/trigger', { method: 'POST' });
+            ElementPlus.ElMessage.success('欧若拉说：' + rs.data.content);
+            loadCare();
+        }
+
+        function startCarePolling() {
+            loadCare();
+            setInterval(loadCare, 30000);
+        }
+
+        async function loadMemorials() {
+            const rs = await api('/api/care/memorials');
+            memorials.value = rs.data || [];
+        }
+
+        async function addMemorial() {
+            if (!memorialForm.title || !memorialForm.date) return notify('请输入名称和日期', 'warning');
+            const dateStr = memorialForm.repeat_yearly ? memorialForm.date.slice(5) : memorialForm.date;
+            await api('/api/care/memorials', {
+                method: 'POST',
+                body: JSON.stringify({ title: memorialForm.title, date_str: dateStr, repeat_yearly: memorialForm.repeat_yearly })
+            });
+            memorialForm.title = ''; memorialForm.date = '';
+            ElementPlus.ElMessage.success('纪念日已添加，到时欧若拉会主动问候');
+            loadMemorials();
+        }
+
+        async function delMemorial(row) {
+            await api(`/api/care/memorials/${row.id}`, { method: 'DELETE' });
+            memorials.value = memorials.value.filter(m => m.id !== row.id);
+        }
+
+        // ---------- tab切换 ----------
+        async function switchTab(tab) {
+            activeTab.value = tab;
+            if (tab === 'memory') await loadMemories();
+            if (tab === 'profile') { await loadProfile(); await loadMemorials(); }
+            if (tab === 'emotion') await loadEmotion();
+        }
+
+        // ---------- 启动 ----------
+        (async function init() {
+            if (!token.value) { authVisible.value = true; return; }
+            pageLoading.value = true;
+            try {
+                const me = await api('/api/user/me');
+                user.value = me.data;
+                await loadSessions();
+                startCarePolling();
+            } catch (e) { /* 401已在api中处理 */ }
+            finally { pageLoading.value = false; }
+        })();
+
+        return {
+            pageLoading, user, activeTab, sidebarCollapsed, authVisible, authTab, authLoading, authForm, suggestions,
+            sessions, currentSessionId, messages, input, sending, statusText, lastEmotion, chatBox,
+            memories, workingMemory, profileForm, lineChart, pieChart, progressColor,
+            careDrawer, careList, unreadCount, memorials, memorialForm,
+            doLogin, doRegister, logout, onUserCommand, newSession, switchSession, delSession, send, quickSend,
+            delMemory, saveProfile, switchTab, fmtTime, categoryName, categoryType,
+            openCare, readAllCare, triggerCare, addMemorial, delMemorial,
+        };
+    }
+});
+app.use(ElementPlus);
+for (const [name, comp] of Object.entries(ElementPlusIconsVue)) app.component(name, comp);
+app.mount('#app');
+</script>
+</body>
+</html>

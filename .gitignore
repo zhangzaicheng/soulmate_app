@@ -1,0 +1,29 @@
+# ===== 敏感信息（数据库密码/API Key，禁止提交） =====
+.env
+.env.*
+!.env.example
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyc
+*.egg-info/
+build/
+dist/
+venv/
+.venv/
+
+# ===== IDE / 编辑器 =====
+.idea/
+.vscode/
+*.swp
+
+# ===== 向量数据库（本地生成，体积大） =====
+chroma_db/
+
+# ===== 日志 =====
+*.log
+
+# ===== 本地数据文件 =====
+*.db
+*.sqlite3
