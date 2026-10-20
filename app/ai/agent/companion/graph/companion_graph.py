@@ -10,16 +10,31 @@ from app.ai.agent.companion.node.dialogue_node import dialogue_node
 from app.ai.agent.companion.node.emotion_node import emotion_node
 from app.ai.agent.companion.node.memory_retrieval_node import memory_retrieval_node
 from app.ai.agent.companion.node.memory_save_node import memory_save_node
+from app.ai.agent.companion.node.music_recommendation_node import music_recommendation_node
 from app.ai.agent.companion.state.companion_state import CompanionState
 from app.ai.memory.manager.session_manager import SessionManager
 from app.common.mysql_db import mysql_db
 
+
+def _route_after_emotion(state: CompanionState) -> str:
+    """emotion之后的路由函数（阶段五条件分支）：
+    need_music=True  -> 插入 music_recommendation 节点（音乐陪伴选曲）
+    need_music=False -> 直接走 memory_retrieval
+    """
+    return "music" if state.get("need_music") else "memory"
+
+
 """
 情感陪伴智能体：
-图结构（阶段二）：START -> emotion（情感分析）-> memory_retrieval（长期记忆检索）
-                -> dialogue（对话生成）-> memory_save（记忆保存+后台记忆更新）-> END
+图结构（阶段五）：
+    START -> emotion（情感分析 + 音乐触发判断）
+          -> [条件分支] need_music=True  -> music_recommendation（音乐陪伴选曲）
+                       need_music=False -> 直接到 memory_retrieval
+          -> memory_retrieval（长期记忆检索）-> dialogue（对话生成）
+          -> memory_save（记忆保存+后台记忆更新）-> END
 业务数据持久化在 MySQL（会话/消息/情绪/画像/工作记忆/长期记忆元数据），
 摘要记忆在 PostgreSQL，长期记忆向量在 Chroma，图状态由 PostgreSQL checkpointer 保存。
+音乐陪伴（阶段五）由情绪累积触发，音乐不写入messages，不污染对话历史与记忆系统。
 """
 
 
@@ -35,12 +50,20 @@ class CompanionGraphAgent:
         graph = StateGraph(CompanionState)
         # 添加节点
         graph.add_node("emotion", emotion_node)
+        graph.add_node("music_recommendation", music_recommendation_node)
         graph.add_node("memory_retrieval", memory_retrieval_node)
         graph.add_node("dialogue", dialogue_node)
         graph.add_node("memory_save", memory_save_node)
-        # 画边：固定流程顺序图
+        # 入口固定
         graph.add_edge(START, "emotion")
-        graph.add_edge("emotion", "memory_retrieval")
+        # 阶段五：emotion后条件分支，负面情绪达阈值时插入音乐推荐
+        graph.add_conditional_edges(
+            "emotion",
+            _route_after_emotion,
+            {"music": "music_recommendation", "memory": "memory_retrieval"},
+        )
+        # 音乐推荐完成后汇合到记忆检索
+        graph.add_edge("music_recommendation", "memory_retrieval")
         graph.add_edge("memory_retrieval", "dialogue")
         graph.add_edge("dialogue", "memory_save")
         graph.add_edge("memory_save", END)
@@ -116,6 +139,9 @@ class CompanionGraphAgent:
             "emotion": "平静",
             "emotion_intensity": 5,
             "is_crisis": False,
+            # 音乐陪伴（阶段五）默认值，由emotion_node判断是否置为True
+            "need_music": False,
+            "music_recommendation": {},
             "ai_answer": "",
         }
         # 配置检查点：thread_id绑定会话
@@ -129,12 +155,15 @@ class CompanionGraphAgent:
                 async for m in self.agent.astream(
                     user_msg, config, stream_mode="custom"
                 ):
-                    # custom事件：{"stage":...} 或 {"emotion":...} 或 token字符串
+                    # custom事件：{"stage":...} / {"emotion":...} / {"music":...} / token字符串
                     if isinstance(m, dict):
                         if "stage" in m:
                             yield {"type": "status", "data": m["stage"]}
                         elif "emotion" in m:
                             yield {"type": "emotion", "data": m["emotion"]}
+                        elif "music" in m:
+                            # 音乐陪伴：把选中的音乐推给前端<audio>播放
+                            yield {"type": "music", "data": m["music"]}
                     elif isinstance(m, str):
                         ai_answer += m
                         yield {"type": "token", "data": m}

@@ -37,6 +37,25 @@ async def memory_save_node(state: CompanionState):
     except Exception as e:
         print(f"消息落库失败:{e}")
 
+    # 音乐陪伴事件落库（阶段五）：只记录事件，不写入messages，不污染对话历史/记忆
+    rec = state.get("music_recommendation") or {}
+    if rec.get("name"):
+        try:
+            with mysql_db() as db:
+                db["cursor"].execute(
+                    "INSERT INTO music_events(user_id, session_id, emotion, music_name, music_file) "
+                    "VALUES(%s,%s,%s,%s,%s)",
+                    (
+                        state["user_id"],
+                        state["session_id"],
+                        state["emotion"],
+                        rec["name"],
+                        rec.get("url", ""),
+                    ),
+                )
+        except Exception as e:
+            print(f"音乐事件落库失败:{e}")
+
     # 后台异步更新四层记忆（对话已流式返回给用户，记忆更新不阻塞）
     async def _update_memories():
         from app.ai.memory.manager.memory_manager import MemoryManager

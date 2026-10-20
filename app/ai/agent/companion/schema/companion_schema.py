@@ -28,6 +28,12 @@ class ProfileSchema(BaseModel):
     relationships: list[str] = Field(default_factory=list, description="重要的人际关系，如养了一只叫团子的猫")
 
 
+class MusicPickSchema(BaseModel):
+    """音乐选曲的结构化输出（阶段五）"""
+    file: str = Field(description="选中的音乐文件名，必须原样来自候选列表的 file 字段，不能编造")
+    reason: str = Field(description="一句话推荐理由，温柔自然，30字以内，不出现技术词")
+
+
 class WorkingMemorySchema(BaseModel):
     """工作记忆更新的结构化输出"""
     summary: str = Field(description="对用户当前状态的整体了解，100字以内，第三人称")

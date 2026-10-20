@@ -36,6 +36,8 @@ pydantic==2.13.4
 vosk==0.3.45
 PyAudio==0.2.14
 
+# ===== 音乐陪伴（阶段五）：只由前端<audio>标签播放（浏览器自带解码，无需后端依赖） =====
+
 # ===== 本地向量模型（bge-base-zh-v1.5 / bge-reranker-large_v1） =====
 torch==2.6.0+cu124
 transformers==4.57.6

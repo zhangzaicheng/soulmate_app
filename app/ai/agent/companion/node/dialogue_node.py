@@ -46,6 +46,17 @@ def build_system_prompt(state: CompanionState) -> str:
             "先温柔地表达关心和陪伴，认真建议用户拨打心理援助热线400-161-9995，"
             "告诉他自己很重要、你一直在。不要说教，不要轻描淡写。"
         )
+
+    # 音乐陪伴（阶段五）：本轮触发了音乐，让AI自然提一句（音乐不写入messages）
+    rec = state.get("music_recommendation") or {}
+    if rec.get("name"):
+        # 智能体给的选曲理由，让AI用自己的话转述，而不是生硬播报歌名
+        reason_hint = f"你选这首的理由是：{rec['reason']}。" if rec.get("reason") else ""
+        system += (
+            f"\n【音乐陪伴】你已经为用户播放了《{rec['name']}》。{reason_hint}"
+            "可以在回复中自然地说一句你给他放了首歌，并用自己的话简单说为什么选这首，"
+            "但不要生硬播报，不要提技术细节、文件路径，也不要说'根据算法''根据描述'这类词。"
+        )
     return system
 
 

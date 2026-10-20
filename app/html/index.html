@@ -79,6 +79,16 @@
         /* ===== 聊天区 ===== */
         .chat-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
         .chat-area { flex: 1; overflow-y: auto; padding: 26px 8%; scroll-behavior: smooth; }
+
+        /* ===== 音乐陪伴面板（阶段五） ===== */
+        .music-panel { min-width: 264px; padding: 10px 12px 14px; border-top: 1px solid var(--border); }
+        .music-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .music-panel-title { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
+        .music-card { background: var(--bg); border-radius: 10px; padding: 10px; }
+        .music-card-name { font-size: 13px; font-weight: 600; color: var(--text); }
+        .music-card-desc { font-size: 12px; color: var(--text-sub); margin-top: 3px; line-height: 1.5; }
+        .music-card-reason { font-size: 11px; color: var(--primary); margin-top: 6px; line-height: 1.5; padding: 5px 7px; background: var(--primary-bg); border-radius: 6px; }
+        .music-card-empty { font-size: 12px; color: var(--text-sub); line-height: 1.6; }
         .msg-row { display: flex; margin-bottom: 18px; animation: fadeUp .25s ease; }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         .msg-row.user { justify-content: flex-end; }
@@ -214,6 +224,26 @@
                             <el-button class="session-del" link type="danger" @click.stop="delSession(s)">
                                 <el-icon><Delete></Delete></el-icon>
                             </el-button>
+                        </div>
+                    </div>
+                    <!-- 音乐陪伴面板（阶段五）：情绪低迷自动播放 + 手动开关 -->
+                    <div class="music-panel">
+                        <div class="music-panel-head">
+                            <span class="music-panel-title">
+                                <el-icon :size="15"><Headset></Headset></el-icon>音乐陪伴
+                            </span>
+                            <el-switch v-model="musicEnabled" size="small" @change="toggleMusicSetting" />
+                        </div>
+                        <div v-if="musicCard" class="music-card">
+                            <div class="music-card-name">{{ musicCard.name }}</div>
+                            <div class="music-card-desc">{{ musicCard.desc }}</div>
+                            <!-- 智能体选曲理由（LLM给出；LLM不可用时为空，此行自动不显示） -->
+                            <div class="music-card-reason" v-if="musicCard.reason">{{ musicCard.reason }}</div>
+                            <audio id="sm-audio" controls autoplay :src="musicCard.url"
+                                   style="width:100%;margin-top:8px"></audio>
+                        </div>
+                        <div v-else class="music-card-empty">
+                            {{ musicEnabled ? '情绪低落时，欧若拉会为你放一首歌' : '已关闭，情绪低落时不会自动播放' }}
                         </div>
                     </div>
                 </div>
@@ -426,6 +456,9 @@ const app = createApp({
         const authVisible = ref(false);
         const authTab = ref('login');
         const authLoading = ref(false);
+        // 音乐陪伴（阶段五）：当前播放的音乐 + 开关
+        const musicCard = ref(null);
+        const musicEnabled = ref(true);
         const authForm = reactive({ username: '', password: '', nickname: '', email: '' });
         const suggestions = ['今天有点累，想找人聊聊', '我最近学会了做一道新菜！', '帮我记住一件事'];
 
@@ -590,13 +623,16 @@ const app = createApp({
                         if (!line.startsWith('data: ')) continue;
                         const data = JSON.parse(line.slice(6));
                         if (data.type === 'status') {
-                            statusText.value = { emotion: '欧若拉正在感受你的情绪...', retrieval: '欧若拉正在回忆...', dialogue: '欧若拉正在回复...' }[data.data] || data.data;
+                            statusText.value = { emotion: '欧若拉正在感受你的情绪...', retrieval: '欧若拉正在回忆...', dialogue: '欧若拉正在回复...', music: '欧若拉正在为你选一首歌...' }[data.data] || data.data;
                         } else if (data.type === 'emotion') {
                             lastEmotion.value = data.data;
                             statusText.value = '';
                         } else if (data.type === 'token') {
                             aiMsg.content += data.data;
                             scrollToBottom();
+                        } else if (data.type === 'music') {
+                            // 阶段五：情绪触发的音乐陪伴，前端<audio>播放并展示卡片
+                            showMusicCard(data.data);
                         } else if (data.type === 'error') {
                             aiMsg.content += '\n（出错了：' + data.data + '）';
                         }
@@ -614,6 +650,34 @@ const app = createApp({
 
         function send() { doSend(input.value.trim()); }
         function quickSend(s) { if (!sending.value) doSend(s); }
+
+        // ---------- 音乐陪伴（阶段五）----------
+        // 后端按情绪选曲后推送 {name,url,desc,emotion}，前端用<audio>播放
+        function showMusicCard(rec) {
+            if (!rec || !rec.url) return;
+            musicCard.value = rec;
+            // 等audio渲染出来再播放（浏览器可能拦截自动播放，失败则用户手动点播放）
+            setTimeout(() => {
+                const el = document.getElementById('sm-audio');
+                if (el) { try { el.load(); el.play(); } catch (e) { /* 自动播放被拦截，忽略 */ } }
+            }, 60);
+        }
+        function closeMusicCard() { musicCard.value = null; }
+        // 读取音乐开关
+        async function loadMusicSetting() {
+            try {
+                const rs = await api('/api/user/music-setting');
+                musicEnabled.value = !!rs.data.music_enabled;
+            } catch (e) { /* 未登录等情况忽略，保持默认开启 */ }
+        }
+        // 切换音乐开关：关闭后即使情绪达标也不再播放
+        async function toggleMusicSetting(val) {
+            try {
+                await api('/api/user/music-setting', { method: 'PUT', body: JSON.stringify({ music_enabled: val }) });
+                musicEnabled.value = val;
+                if (!val) closeMusicCard();
+            } catch (e) { notify('音乐设置保存失败，请重试', 'warning'); }
+        }
 
         // ---------- 记忆页 ----------
         async function loadMemories() {
@@ -756,6 +820,7 @@ const app = createApp({
                 user.value = me.data;
                 await loadSessions();
                 startCarePolling();
+                await loadMusicSetting();
             } catch (e) { /* 401已在api中处理 */ }
             finally { pageLoading.value = false; }
         })();
@@ -765,7 +830,9 @@ const app = createApp({
             sessions, currentSessionId, messages, input, sending, statusText, lastEmotion, chatBox,
             memories, workingMemory, profileForm, lineChart, pieChart, progressColor,
             careDrawer, careList, unreadCount, memorials, memorialForm,
+            musicCard, musicEnabled,
             doLogin, doRegister, logout, onUserCommand, newSession, switchSession, delSession, send, quickSend,
+            showMusicCard, closeMusicCard, loadMusicSetting, toggleMusicSetting,
             delMemory, saveProfile, switchTab, fmtTime, categoryName, categoryType,
             openCare, readAllCare, triggerCare, addMemorial, delMemorial,
         };
